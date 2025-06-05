@@ -1,3 +1,13 @@
+
+# FRONTEND
+node_modules/
+.env
+
+# PYTHON
+venv/
+__pycache__/
+*.pyc
+
 node_modules
 dist
 .DS_Store
