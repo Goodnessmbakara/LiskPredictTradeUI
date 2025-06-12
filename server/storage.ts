@@ -3,6 +3,8 @@ import {
   type User, type Prediction, type Trade, type Sentiment, type Portfolio,
   type InsertUser, type InsertPrediction, type InsertTrade, type InsertSentiment, type InsertPortfolio
 } from "@shared/schema";
+import { tokens as tokensTable } from "./db/schema";
+import { db } from "./db";
 
 export interface IStorage {
   // Users
@@ -271,3 +273,19 @@ export class MemStorage implements IStorage {
 }
 
 export const storage = new MemStorage();
+
+export async function upsertTokens(tokenList) {
+  for (const token of tokenList) {
+    await db
+      .insert(tokensTable)
+      .values(token)
+      .onConflictDoUpdate({
+        target: tokensTable.address,
+        set: token,
+      });
+  }
+}
+
+export async function getAllTokens() {
+  return db.select().from(tokensTable);
+}

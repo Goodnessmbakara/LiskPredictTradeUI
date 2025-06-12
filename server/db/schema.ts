@@ -71,4 +71,15 @@ export const performanceMetrics = pgTable('performance_metrics', {
   technicalAccuracy: numeric('technical_accuracy'),
   riskAssessmentAccuracy: numeric('risk_assessment_accuracy'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+// Tokens table
+export const tokens = pgTable('tokens', {
+  id: serial('id').primaryKey(),
+  symbol: text('symbol').notNull(),
+  name: text('name').notNull(),
+  address: text('address').notNull(),
+  decimals: text('decimals').notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
 }); 

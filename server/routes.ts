@@ -3,6 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertTradeSchema, insertSentimentSchema } from "@shared/schema";
 import { z } from "zod";
+import axios from "axios";
+import { upsertTokens, getAllTokens } from "./storage";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get all predictions
@@ -177,6 +179,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(prediction);
     } catch (error) {
       res.status(500).json({ error: "Failed to generate prediction" });
+    }
+  });
+
+  // Discover tokens from Lisk API and save to DB
+  app.post("/api/discover-tokens", async (req, res) => {
+    try {
+      const LISK_TOKEN_API = "https://api.lisk.bexplorer.com/api/v3/tokens";
+      const response = await axios.get(LISK_TOKEN_API);
+      const tokens = response.data.data.map((token: any) => ({
+        symbol: token.symbol,
+        name: token.name,
+        address: token.address,
+        decimals: token.decimals?.toString() || "18",
+      }));
+      await upsertTokens(tokens);
+      res.json({ success: true, count: tokens.length });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to discover tokens", details: error.message });
+    }
+  });
+
+  // List all discovered tokens
+  app.get("/api/tokens", async (req, res) => {
+    try {
+      const tokens = await getAllTokens();
+      res.json(tokens);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tokens", details: error.message });
     }
   });
 

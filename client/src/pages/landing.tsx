@@ -1,14 +1,16 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "wouter";
-import { 
-  TrendingUp, 
-  Zap, 
-  Shield, 
-  Brain, 
-  Wallet, 
-  DollarSign, 
+import { Link, useLocation } from "wouter";
+import { useWallet } from "@/context/WalletProvider";
+import { useEffect, useState } from "react";
+import {
+  TrendingUp,
+  Zap,
+  Shield,
+  Brain,
+  Wallet,
+  DollarSign,
   Bot,
   Github,
   Twitter,
@@ -17,11 +19,79 @@ import {
   CheckCircle,
   Eye,
   Clock,
-  Lock
+  Lock,
+  LogOut,
+  AlertCircle,
 } from "lucide-react";
 import { SiReact, SiFastapi, SiPytorch, SiSolidity } from "react-icons/si";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Landing() {
+  const [, setLocation] = useLocation();
+  const { isConnected, address, connect, disconnect } = useWallet();
+  const [showConnectAlert, setShowConnectAlert] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+
+  useEffect(() => {
+    // Check if we were redirected from dashboard
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("message") === "connect_wallet") {
+      setShowConnectAlert(true);
+    }
+  }, []);
+
+  // Add effect to monitor connection state
+  useEffect(() => {
+    console.log("Wallet connection state changed:", { isConnected, address });
+  }, [isConnected, address]);
+
+  const handleGetStarted = async () => {
+    console.log("Get Started clicked, current state:", {
+      isConnected,
+      isConnecting,
+    });
+    try {
+      setIsConnecting(true);
+      if (!isConnected) {
+        console.log("Attempting to connect wallet...");
+        await connect();
+        console.log("Wallet connection completed");
+      }
+
+      // Force a state update and check
+      const checkConnection = async () => {
+        if (isConnected) {
+          console.log("Wallet is connected, redirecting to dashboard...");
+          window.location.href = "/dashboard";
+        } else {
+          console.log("Wallet is not connected, retrying in 500ms...");
+          setTimeout(checkConnection, 500);
+        }
+      };
+
+      // Start checking connection
+      checkConnection();
+    } catch (error) {
+      console.error("Failed to connect wallet:", error);
+    } finally {
+      setIsConnecting(false);
+      console.log("Connection attempt finished, final state:", {
+        isConnected,
+        isConnecting,
+      });
+    }
+  };
+
+  const handleDisconnect = async () => {
+    console.log("Disconnect clicked, current state:", { isConnected });
+    try {
+      await disconnect();
+      console.log("Wallet disconnected successfully");
+    } catch (error) {
+      console.error("Failed to disconnect wallet:", error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -33,24 +103,73 @@ export default function Landing() {
             </div>
             <span className="font-bold text-xl">TradingAI</span>
           </div>
-          
+
           <nav className="hidden md:flex items-center space-x-8">
-            <a href="#home" className="text-foreground hover:text-primary transition-colors">Home</a>
-            <Link href="/dashboard" className="text-foreground hover:text-primary transition-colors">
+            <a
+              href="#home"
+              className="text-foreground hover:text-primary transition-colors"
+            >
+              Home
+            </a>
+            <Link
+              href="/dashboard"
+              className="text-foreground hover:text-primary transition-colors"
+            >
               Dashboard
             </Link>
-            <a href="#features" className="text-foreground hover:text-primary transition-colors">Features</a>
-            <a href="#contact" className="text-foreground hover:text-primary transition-colors">Contact</a>
+            <a
+              href="#features"
+              className="text-foreground hover:text-primary transition-colors"
+            >
+              Features
+            </a>
+            <a
+              href="#contact"
+              className="text-foreground hover:text-primary transition-colors"
+            >
+              Contact
+            </a>
           </nav>
 
-          <Link href="/dashboard">
-            <Button className="bg-primary hover:bg-primary/90">
-              Get Started
+          {isConnected ? (
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-muted-foreground">
+                {address?.slice(0, 6)}...{address?.slice(-4)}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDisconnect}
+                className="flex items-center"
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Disconnect
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="bg-primary hover:bg-primary/90"
+              onClick={handleGetStarted}
+              disabled={isConnecting}
+            >
+              {isConnecting ? "Connecting..." : "Connect Wallet"}
               <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
-          </Link>
+          )}
         </div>
       </header>
+
+      {/* Connect Wallet Alert */}
+      {showConnectAlert && (
+        <div className="container mx-auto px-4 mt-4">
+          <Alert variant="destructive" className="bg-destructive/10">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Please connect your wallet to access the dashboard
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       {/* Hero Section */}
       <section id="home" className="relative py-20 md:py-32">
@@ -59,7 +178,7 @@ export default function Landing() {
             <Zap className="mr-2 h-4 w-4" />
             Powered by Advanced AI
           </Badge>
-          
+
           <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
             <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
               AI-Powered Token Prediction
@@ -67,24 +186,32 @@ export default function Landing() {
             <br />
             for Smarter Web3 Trading
           </h1>
-          
+
           <p className="text-xl text-muted-foreground mb-8 max-w-3xl mx-auto leading-relaxed">
-            Grow your crypto passively. Our AI analyzes token data and executes trades automatically — so you don't have to.
+            Grow your crypto passively. Our AI analyzes token data and executes
+            trades automatically — so you don't have to.
           </p>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/dashboard">
-              <Button size="lg" className="bg-primary hover:bg-primary/90 text-lg px-8 py-4">
-                Get Started Now
-                <TrendingUp className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
+            <Button
+              size="lg"
+              className="bg-primary hover:bg-primary/90 text-lg px-8 py-4"
+              onClick={handleGetStarted}
+              disabled={isConnecting}
+            >
+              {isConnected
+                ? "Go to Dashboard"
+                : isConnecting
+                ? "Connecting..."
+                : "Get Started Now"}
+              <TrendingUp className="ml-2 h-5 w-5" />
+            </Button>
             <Button variant="outline" size="lg" className="text-lg px-8 py-4">
               Watch Demo
               <Eye className="ml-2 h-5 w-5" />
             </Button>
           </div>
-          
+
           <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
             <div className="text-center">
               <div className="text-3xl font-bold text-primary">98.5%</div>
@@ -92,7 +219,9 @@ export default function Landing() {
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-primary">$2.4M+</div>
-              <div className="text-muted-foreground">Assets Under Management</div>
+              <div className="text-muted-foreground">
+                Assets Under Management
+              </div>
             </div>
             <div className="text-center">
               <div className="text-3xl font-bold text-primary">10K+</div>
@@ -106,12 +235,14 @@ export default function Landing() {
       <section className="py-20 bg-secondary/30">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              How It Works
+            </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Start trading smarter in three simple steps
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 group">
               <CardContent className="p-8 text-center">
@@ -123,11 +254,12 @@ export default function Landing() {
                 </div>
                 <h3 className="text-xl font-semibold mb-4">Connect Wallet</h3>
                 <p className="text-muted-foreground">
-                  Securely connect your Web3 wallet using industry-standard protocols. Your funds remain under your control.
+                  Securely connect your Web3 wallet using industry-standard
+                  protocols. Your funds remain under your control.
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 group">
               <CardContent className="p-8 text-center">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
@@ -136,13 +268,16 @@ export default function Landing() {
                 <div className="absolute top-4 right-4 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold">
                   2
                 </div>
-                <h3 className="text-xl font-semibold mb-4">Fund Your Account</h3>
+                <h3 className="text-xl font-semibold mb-4">
+                  Fund Your Account
+                </h3>
                 <p className="text-muted-foreground">
-                  Deposit your preferred crypto assets. Set your risk tolerance and investment parameters.
+                  Deposit your preferred crypto assets. Set your risk tolerance
+                  and investment parameters.
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="relative overflow-hidden border-2 hover:border-primary/50 transition-all duration-300 group">
               <CardContent className="p-8 text-center">
                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:bg-primary/20 transition-colors">
@@ -151,9 +286,12 @@ export default function Landing() {
                 <div className="absolute top-4 right-4 w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center font-bold">
                   3
                 </div>
-                <h3 className="text-xl font-semibold mb-4">Let AI Trade For You</h3>
+                <h3 className="text-xl font-semibold mb-4">
+                  Let AI Trade For You
+                </h3>
                 <p className="text-muted-foreground">
-                  Our advanced AI monitors markets 24/7, executing optimal trades based on real-time analysis.
+                  Our advanced AI monitors markets 24/7, executing optimal
+                  trades based on real-time analysis.
                 </p>
               </CardContent>
             </Card>
@@ -165,12 +303,15 @@ export default function Landing() {
       <section id="features" className="py-20">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Powerful Features</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Powerful Features
+            </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Advanced technology meets intuitive design for optimal trading performance
+              Advanced technology meets intuitive design for optimal trading
+              performance
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <Card className="p-6 hover:shadow-lg transition-all duration-300 group border-2 hover:border-primary/50">
               <CardContent className="p-0">
@@ -183,7 +324,7 @@ export default function Landing() {
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="p-6 hover:shadow-lg transition-all duration-300 group border-2 hover:border-primary/50">
               <CardContent className="p-0">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
@@ -195,19 +336,21 @@ export default function Landing() {
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="p-6 hover:shadow-lg transition-all duration-300 group border-2 hover:border-primary/50">
               <CardContent className="p-0">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
                   <Brain className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="font-semibold mb-2">On-Chain + Off-Chain Insights</h3>
+                <h3 className="font-semibold mb-2">
+                  On-Chain + Off-Chain Insights
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   Comprehensive analysis combining blockchain and market data
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="p-6 hover:shadow-lg transition-all duration-300 group border-2 hover:border-primary/50">
               <CardContent className="p-0">
                 <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
@@ -227,12 +370,14 @@ export default function Landing() {
       <section className="py-20 bg-secondary/30">
         <div className="container mx-auto px-4">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Built with Cutting-Edge Technology</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">
+              Built with Cutting-Edge Technology
+            </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
               Powered by the most advanced frameworks and tools in the industry
             </p>
           </div>
-          
+
           <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
             <div className="flex flex-col items-center group">
               <div className="w-16 h-16 bg-background rounded-xl flex items-center justify-center mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300">
@@ -240,21 +385,21 @@ export default function Landing() {
               </div>
               <span className="text-sm font-medium">React</span>
             </div>
-            
+
             <div className="flex flex-col items-center group">
               <div className="w-16 h-16 bg-background rounded-xl flex items-center justify-center mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300">
                 <SiFastapi className="h-8 w-8 text-[#009688]" />
               </div>
               <span className="text-sm font-medium">FastAPI</span>
             </div>
-            
+
             <div className="flex flex-col items-center group">
               <div className="w-16 h-16 bg-background rounded-xl flex items-center justify-center mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300">
                 <SiPytorch className="h-8 w-8 text-[#EE4C2C]" />
               </div>
               <span className="text-sm font-medium">PyTorch</span>
             </div>
-            
+
             <div className="flex flex-col items-center group">
               <div className="w-16 h-16 bg-background rounded-xl flex items-center justify-center mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300">
                 <div className="h-8 w-8 bg-[#FF6B35] rounded flex items-center justify-center text-white font-bold text-xs">
@@ -263,7 +408,7 @@ export default function Landing() {
               </div>
               <span className="text-sm font-medium">Lisk</span>
             </div>
-            
+
             <div className="flex flex-col items-center group">
               <div className="w-16 h-16 bg-background rounded-xl flex items-center justify-center mb-3 shadow-lg group-hover:shadow-xl transition-all duration-300">
                 <SiSolidity className="h-8 w-8 text-[#363636]" />
@@ -283,16 +428,22 @@ export default function Landing() {
                 Ready to Start Smart Trading?
               </h2>
               <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-                Join thousands of traders who are already using AI to maximize their crypto profits
+                Join thousands of traders who are already using AI to maximize
+                their crypto profits
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/dashboard">
-                  <Button size="lg" className="bg-primary hover:bg-primary/90 text-lg px-8 py-4">
-                    Start Trading Now
-                    <TrendingUp className="ml-2 h-5 w-5" />
-                  </Button>
-                </Link>
-                <Button variant="outline" size="lg" className="text-lg px-8 py-4">
+                <Button
+                  size="lg"
+                  className="bg-primary hover:bg-primary/90 text-lg px-8 py-4"
+                >
+                  Start Trading Now
+                  <TrendingUp className="ml-2 h-5 w-5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  className="text-lg px-8 py-4"
+                >
                   Learn More
                   <CheckCircle className="ml-2 h-5 w-5" />
                 </Button>
@@ -314,7 +465,8 @@ export default function Landing() {
                 <span className="font-bold text-xl">TradingAI</span>
               </div>
               <p className="text-muted-foreground mb-6 max-w-md">
-                The future of crypto trading is here. Let our AI handle the complexity while you enjoy the profits.
+                The future of crypto trading is here. Let our AI handle the
+                complexity while you enjoy the profits.
               </p>
               <div className="flex space-x-4">
                 <Button variant="outline" size="sm" className="p-2">
@@ -328,28 +480,66 @@ export default function Landing() {
                 </Button>
               </div>
             </div>
-            
+
             <div>
               <h4 className="font-semibold mb-4">Product</h4>
               <ul className="space-y-2 text-muted-foreground">
-                <li><a href="#features" className="hover:text-primary transition-colors">Features</a></li>
-                <li><Link href="/dashboard" className="hover:text-primary transition-colors">Dashboard</Link></li>
-                <li><a href="#" className="hover:text-primary transition-colors">API</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Documentation</a></li>
+                <li>
+                  <a
+                    href="#features"
+                    className="hover:text-primary transition-colors"
+                  >
+                    Features
+                  </a>
+                </li>
+                <li>
+                  <Link
+                    href="/dashboard"
+                    className="hover:text-primary transition-colors"
+                  >
+                    Dashboard
+                  </Link>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    API
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Documentation
+                  </a>
+                </li>
               </ul>
             </div>
-            
+
             <div>
               <h4 className="font-semibold mb-4">Support</h4>
               <ul className="space-y-2 text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">Help Center</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Community</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Status</a></li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Help Center
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Contact
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Community
+                  </a>
+                </li>
+                <li>
+                  <a href="#" className="hover:text-primary transition-colors">
+                    Status
+                  </a>
+                </li>
               </ul>
             </div>
           </div>
-          
+
           <div className="border-t border-border mt-12 pt-8 text-center text-muted-foreground">
             <p>&copy; 2024 TradingAI. All rights reserved.</p>
           </div>

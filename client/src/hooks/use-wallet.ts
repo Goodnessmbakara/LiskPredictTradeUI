@@ -10,6 +10,13 @@ interface WalletState {
   provider: ethers.BrowserProvider | null;
 }
 
+// Create a single Web3Modal instance
+const web3Modal = new Web3Modal({
+  cacheProvider: true,
+  providerOptions: {},
+  disableInjectedProvider: false,
+});
+
 export function useWallet() {
   const [wallet, setWallet] = useState<WalletState>({
     isConnected: false,
@@ -20,14 +27,34 @@ export function useWallet() {
   const { toast } = useToast();
 
   useEffect(() => {
+    let mounted = true;
+
     // Check if wallet is already connected
     const checkConnection = async () => {
-      if (typeof window.ethereum !== "undefined") {
-        try {
+      try {
+        // First check if there's a cached provider
+        if (web3Modal.cachedProvider) {
+          const provider = new ethers.BrowserProvider(web3Modal.cachedProvider);
+          const accounts = await provider.listAccounts();
+          
+          if (accounts.length > 0 && mounted) {
+            const balance = await provider.getBalance(accounts[0]);
+            setWallet({
+              isConnected: true,
+              address: accounts[0].address,
+              balance: ethers.formatEther(balance),
+              provider,
+            });
+            return;
+          }
+        }
+
+        // If no cached provider or no accounts, check window.ethereum
+        if (typeof window.ethereum !== "undefined") {
           const provider = new ethers.BrowserProvider(window.ethereum);
           const accounts = await provider.listAccounts();
           
-          if (accounts.length > 0) {
+          if (accounts.length > 0 && mounted) {
             const balance = await provider.getBalance(accounts[0]);
             setWallet({
               isConnected: true,
@@ -36,44 +63,62 @@ export function useWallet() {
               provider,
             });
           }
-        } catch (error) {
-          console.error("Error checking wallet connection:", error);
+        }
+      } catch (error) {
+        console.error("Error checking wallet connection:", error);
+        if (mounted) {
+          // Only clear cache if there's an actual error
+          if (error instanceof Error && !error.message.includes("User rejected")) {
+            web3Modal.clearCachedProvider();
+            setWallet({
+              isConnected: false,
+              address: null,
+              balance: "0.00",
+              provider: null,
+            });
+          }
         }
       }
     };
 
+    // Initial connection check
     checkConnection();
 
-    // Listen for account changes
-    if (window.ethereum) {
-      window.ethereum.on("accountsChanged", (accounts: string[]) => {
-        if (accounts.length === 0) {
-          disconnect();
-        } else {
-          checkConnection();
-        }
-      });
+    // Set up event listeners
+    const setupEventListeners = () => {
+      if (window.ethereum) {
+        const handleAccountsChanged = (accounts: string[]) => {
+          if (accounts.length === 0) {
+            disconnect();
+          } else {
+            checkConnection();
+          }
+        };
 
-      window.ethereum.on("chainChanged", () => {
-        window.location.reload();
-      });
-    }
+        const handleChainChanged = () => {
+          window.location.reload();
+        };
+
+        window.ethereum.on("accountsChanged", handleAccountsChanged);
+        window.ethereum.on("chainChanged", handleChainChanged);
+
+        return () => {
+          window.ethereum.removeListener("accountsChanged", handleAccountsChanged);
+          window.ethereum.removeListener("chainChanged", handleChainChanged);
+        };
+      }
+    };
+
+    const cleanup = setupEventListeners();
 
     return () => {
-      if (window.ethereum) {
-        window.ethereum.removeListener("accountsChanged", () => {});
-        window.ethereum.removeListener("chainChanged", () => {});
-      }
+      mounted = false;
+      if (cleanup) cleanup();
     };
   }, []);
 
   const connect = async () => {
     try {
-      const web3Modal = new Web3Modal({
-        cacheProvider: true,
-        providerOptions: {},
-      });
-
       const connection = await web3Modal.connect();
       const provider = new ethers.BrowserProvider(connection);
       const accounts = await provider.listAccounts();
@@ -94,21 +139,19 @@ export function useWallet() {
       }
     } catch (error) {
       console.error("Error connecting wallet:", error);
-      toast({
-        title: "Connection Failed",
-        description: "Failed to connect wallet. Please try again.",
-        variant: "destructive",
-      });
+      // Only show error toast if it's not a user rejection
+      if (!(error instanceof Error && error.message.includes("User rejected"))) {
+        toast({
+          title: "Connection Failed",
+          description: "Failed to connect wallet. Please try again.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
   const disconnect = async () => {
     try {
-      const web3Modal = new Web3Modal({
-        cacheProvider: true,
-        providerOptions: {},
-      });
-      
       await web3Modal.clearCachedProvider();
       
       setWallet({

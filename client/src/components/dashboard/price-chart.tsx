@@ -1,6 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 
@@ -10,138 +16,167 @@ declare global {
   }
 }
 
+// Keep track of script loading state globally
+let chartScriptLoaded = false;
+let chartScriptLoading = false;
+
 export function PriceChart() {
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstance = useRef<any>(null);
+  const [isChartLoaded, setIsChartLoaded] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    // Load Chart.js dynamically
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-    script.onload = () => {
-      initializeChart();
+    const loadChartScript = () => {
+      if (chartScriptLoaded) {
+        setIsChartLoaded(true);
+        return;
+      }
+
+      if (chartScriptLoading) {
+        return;
+      }
+
+      chartScriptLoading = true;
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/chart.js";
+      script.async = true;
+      script.onload = () => {
+        chartScriptLoaded = true;
+        chartScriptLoading = false;
+        setIsChartLoaded(true);
+      };
+      script.onerror = () => {
+        chartScriptLoading = false;
+        console.error("Failed to load Chart.js");
+      };
+      document.head.appendChild(script);
     };
-    document.head.appendChild(script);
+
+    loadChartScript();
 
     return () => {
       if (chartInstance.current) {
         chartInstance.current.destroy();
+        chartInstance.current = null;
       }
     };
   }, []);
 
+  useEffect(() => {
+    if (isChartLoaded && chartRef.current && !isInitialized) {
+      initializeChart();
+      setIsInitialized(true);
+    }
+  }, [isChartLoaded, isInitialized]);
+
   const initializeChart = () => {
     if (!chartRef.current || !window.Chart) return;
 
-    const ctx = chartRef.current.getContext('2d');
-    
-    chartInstance.current = new window.Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
-        datasets: [
-          {
-            label: 'ETH Price',
-            data: [2380, 2420, 2450, 2431, 2465, 2440, 2455],
-            borderColor: 'hsl(217, 91%, 60%)', // primary
-            backgroundColor: 'hsla(217, 91%, 60%, 0.1)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointBackgroundColor: 'hsl(217, 91%, 60%)',
-            pointBorderColor: 'hsl(217, 91%, 60%)',
-            pointRadius: 4,
-            pointHoverRadius: 6,
-          },
-          {
-            label: 'AI Prediction',
-            data: [2390, 2425, 2455, 2440, 2470, 2445, 2465],
-            borderColor: 'hsl(142, 71%, 45%)', // chart-1
-            backgroundColor: 'hsla(142, 71%, 45%, 0.1)',
-            borderWidth: 2,
-            borderDash: [5, 5],
-            fill: false,
-            tension: 0.4,
-            pointBackgroundColor: 'hsl(142, 71%, 45%)',
-            pointBorderColor: 'hsl(142, 71%, 45%)',
-            pointRadius: 4,
-            pointHoverRadius: 6,
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            labels: {
-              color: 'hsl(210, 40%, 98%)', // foreground
-              font: {
-                family: 'Inter, system-ui, sans-serif'
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: {
-              color: 'hsl(217, 10%, 65%)' // muted-foreground
-            },
-            grid: {
-              color: 'hsl(215, 28%, 17%)' // border
-            }
-          },
-          y: {
-            ticks: {
-              color: 'hsl(217, 10%, 65%)', // muted-foreground
-              callback: function(value: any) {
-                return '$' + value;
-              }
-            },
-            grid: {
-              color: 'hsl(215, 28%, 17%)' // border
-            }
-          }
-        },
-        interaction: {
-          intersect: false,
-          mode: 'index'
-        }
-      }
-    });
+    const ctx = chartRef.current.getContext("2d");
+    if (!ctx) return;
 
-    // Simulate real-time updates
-    const updateChart = () => {
-      if (!chartInstance.current) return;
-      
-      const chart = chartInstance.current;
-      const data = chart.data;
-      
-      // Add new data point
-      const lastActualPrice = data.datasets[0].data[data.datasets[0].data.length - 1];
-      const lastPredictionPrice = data.datasets[1].data[data.datasets[1].data.length - 1];
-      
-      const newActualPrice = lastActualPrice + (Math.random() - 0.5) * 20;
-      const newPredictionPrice = lastPredictionPrice + (Math.random() - 0.5) * 15;
-      
-      data.datasets[0].data.push(newActualPrice);
-      data.datasets[1].data.push(newPredictionPrice);
-      
-      if (data.datasets[0].data.length > 20) {
-        data.datasets[0].data.shift();
-        data.datasets[1].data.shift();
-        data.labels.shift();
-      }
-      
+    // Destroy existing chart if it exists
+    if (chartInstance.current) {
+      chartInstance.current.destroy();
+      chartInstance.current = null;
+    }
+
+    try {
+      // Create new chart
+      chartInstance.current = new window.Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Price",
+              data: [],
+              borderColor: "rgb(34, 197, 94)",
+              backgroundColor: "rgba(34, 197, 94, 0.1)",
+              tension: 0.4,
+              fill: true,
+            },
+            {
+              label: "AI Prediction",
+              data: [],
+              borderColor: "rgb(59, 130, 246)",
+              backgroundColor: "rgba(59, 130, 246, 0.1)",
+              borderDash: [5, 5],
+              tension: 0.4,
+              fill: true,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: "top",
+            },
+            tooltip: {
+              mode: "index",
+              intersect: false,
+            },
+          },
+          scales: {
+            x: {
+              grid: {
+                display: false,
+              },
+            },
+            y: {
+              grid: {
+                color: "rgba(0, 0, 0, 0.1)",
+              },
+            },
+          },
+        },
+      });
+
+      // Initial data update
+      updateChart();
+
+      // Set up periodic updates
+      const interval = setInterval(updateChart, 5000);
+      return () => clearInterval(interval);
+    } catch (error) {
+      console.error("Error initializing chart:", error);
+    }
+  };
+
+  const updateChart = () => {
+    if (!chartInstance.current) return;
+
+    try {
+      // Generate mock data
       const now = new Date();
-      data.labels.push(now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0'));
-      
-      chart.update('none');
-    };
+      const labels = Array.from({ length: 24 }, (_, i) => {
+        const time = new Date(now.getTime() - (23 - i) * 5 * 60000);
+        return time.toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      });
 
-    const interval = setInterval(updateChart, 5000);
-    
-    return () => clearInterval(interval);
+      const priceData = Array.from(
+        { length: 24 },
+        () => Math.random() * 100 + 2000
+      );
+
+      const predictionData = priceData.map(
+        (price) => price + (Math.random() * 40 - 20)
+      );
+
+      // Update chart data
+      chartInstance.current.data.labels = labels;
+      chartInstance.current.data.datasets[0].data = priceData;
+      chartInstance.current.data.datasets[1].data = predictionData;
+      chartInstance.current.update();
+    } catch (error) {
+      console.error("Error updating chart:", error);
+    }
   };
 
   return (
@@ -149,8 +184,12 @@ export function PriceChart() {
       <CardHeader>
         <div className="flex items-center justify-between">
           <div>
-            <CardTitle className="text-lg font-semibold text-foreground">ETH/USD Price & AI Prediction</CardTitle>
-            <p className="text-sm text-muted-foreground">Real-time price with LSTM predictions</p>
+            <CardTitle className="text-lg font-semibold text-foreground">
+              ETH/USD Price & AI Prediction
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Real-time price with LSTM predictions
+            </p>
           </div>
           <div className="flex items-center space-x-2">
             <Select defaultValue="4h">
@@ -164,7 +203,7 @@ export function PriceChart() {
                 <SelectItem value="1w">1W</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" onClick={updateChart}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
@@ -174,7 +213,7 @@ export function PriceChart() {
         <div className="h-80 chart-container">
           <canvas ref={chartRef} className="w-full h-full"></canvas>
         </div>
-        
+
         <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-border">
           <div className="text-center">
             <p className="text-muted-foreground text-sm">Next Hour</p>
